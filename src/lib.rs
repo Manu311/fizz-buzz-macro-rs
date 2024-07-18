@@ -5,43 +5,37 @@ use syn::{parse_macro_input, LitInt, LitStr, Token};
 
 #[proc_macro]
 pub fn fizz_buzz_generator(input: TokenStream) -> TokenStream {
-    let generator = parse_macro_input!(input as FizzBuzzConfig);
+    let FizzBuzzConfig(configurations, separator) = parse_macro_input!(input as FizzBuzzConfig);
 
-    let _max_string_size = generator.0.iter().fold(0, |mut acc, add| {
+    let max_string_size = configurations.iter().fold(0, |mut acc, add| {
         acc += add.replacement.len();
         acc
     });
 
-    let matching_slice: Vec<_> = generator
-        .0
-        .into_iter()
-        .map(move |conf| {
-            let divisor = conf.divisor as u32;
-            let replacement = &conf.replacement;
-            quote! { (#divisor, #replacement) }
-        })
-        .collect();
-
-    let separator = &generator.1;
+    let matching_slice = configurations.into_iter().map(move |conf| {
+        let divisor = conf.divisor as u32;
+        let replacement = &conf.replacement;
+        quote! { (#divisor, #replacement) }
+    });
 
     let expanded = quote! {
         |input: u32| {
             let matching_slices = &[#(#matching_slice), *];
-            let mut iter = matching_slices
+            let result = matching_slices
                 .into_iter()
                 .filter(|(d, _)| input % d == 0)
-                .map(|(_, s)| s)
-                .peekable();
-            if iter.peek().is_some() {
-                iter.enumerate().fold(String::new(), |mut carry, (i, w)| {
-                    if i != 0 {
-                        carry.push_str(#separator);
-                    }
-                    carry.push_str(w);
-                    carry
-                })
-            } else {
+                .enumerate()
+                .fold(String::with_capacity(#max_string_size), |mut carry, (i, (_, w))| {
+                if i != 0 {
+                    carry.push_str(#separator);
+                }
+                carry.push_str(w);
+                carry
+            });
+            if result.is_empty() {
                 format!("{input}")
+            }else{
+                result
             }
         }
     };

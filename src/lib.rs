@@ -7,30 +7,41 @@ use syn::{parse_macro_input, LitInt, LitStr, Token};
 pub fn fizz_buzz_generator(input: TokenStream) -> TokenStream {
     let generator = parse_macro_input!(input as FizzBuzzConfig);
 
-    let matches: Vec<_> = generator
+    let _max_string_size = generator.0.iter().fold(0, |mut acc, add| {
+        acc += add.replacement.len();
+        acc
+    });
+
+    let matching_slice: Vec<_> = generator
         .0
         .into_iter()
-        .map(move |configuration| {
-            let divisor = configuration.divisor as u32;
-            let replacement = configuration.replacement;
-            quote! {
-            if i % #divisor == 0 {
-                matching_numbers.push(String::from(#replacement));
-            } }
+        .map(move |conf| {
+            let divisor = conf.divisor as u32;
+            let replacement = &conf.replacement;
+            quote! { (#divisor, #replacement) }
         })
         .collect();
 
-    let separator = generator.1;
-    let max_matches = matches.len();
+    let separator = &generator.1;
 
     let expanded = quote! {
-        |i: u32| {
-            let mut matching_numbers = Vec::with_capacity(#max_matches);
-            #(#matches);*
-            if matching_numbers.is_empty() {
-                format!("{i}")
-            }else{
-                matching_numbers.join(#separator)
+        |input: u32| {
+            let matching_slices = &[#(#matching_slice), *];
+            let mut iter = matching_slices
+                .into_iter()
+                .filter(|(d, _)| input % d == 0)
+                .map(|(_, s)| s)
+                .peekable();
+            if iter.peek().is_some() {
+                iter.enumerate().fold(String::new(), |mut carry, (i, w)| {
+                    if i != 0 {
+                        carry.push_str(#separator);
+                    }
+                    carry.push_str(w);
+                    carry
+                })
+            } else {
+                format!("{input}")
             }
         }
     };
@@ -38,6 +49,7 @@ pub fn fizz_buzz_generator(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+#[derive(Debug)]
 struct FizzBuzzConfig(Vec<Configuration>, String);
 
 impl Parse for FizzBuzzConfig {

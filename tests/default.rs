@@ -66,3 +66,27 @@ fn different_separator() {
     assert_eq!("Fizz - Buzz", fizz_buzz(15));
     assert_eq!("16", fizz_buzz(16));
 }
+
+#[test]
+fn optimize_common_divisables() {
+    let fizz_buzz = fizz_buzz_generator! { 12 => "Fizz", 18 => "Buzz" };
+    for offset in 0..5 {
+        let offset = 36 * offset;
+        for input in 1 + offset..11 + offset {
+            assert_eq!(format!("{input}"), fizz_buzz(input));
+        }
+        assert_eq!("Fizz", fizz_buzz(12 + offset));
+        for input in 13 + offset..17 + offset {
+            assert_eq!(format!("{input}"), fizz_buzz(input));
+        }
+        assert_eq!("Buzz", fizz_buzz(18 + offset));
+        for input in 19 + offset..23 + offset {
+            assert_eq!(format!("{input}"), fizz_buzz(input));
+        }
+        assert_eq!("Fizz", fizz_buzz(24 + offset));
+        for input in 25 + offset..35 + offset {
+            assert_eq!(format!("{input}"), fizz_buzz(input));
+        }
+        assert_eq!("FizzBuzz", fizz_buzz(36 + offset));
+    }
+}

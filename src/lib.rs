@@ -1,41 +1,77 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::iter::repeat_with;
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream, Result};
 use syn::{parse_macro_input, LitInt, LitStr, Token};
 
+fn gcd(a: u32, b: u32) -> u32 {
+    if a > b {
+        ordered_gcd(a, b)
+    } else {
+        ordered_gcd(b, a)
+    }
+}
+
+fn ordered_gcd(big: u32, small: u32) -> u32 {
+    if small == 0 {
+        big
+    } else {
+        let new_small = big % small;
+        ordered_gcd(small, new_small)
+    }
+}
+
 #[proc_macro]
 pub fn fizz_buzz_generator(input: TokenStream) -> TokenStream {
     let FizzBuzzConfig(configurations, separator) = parse_macro_input!(input as FizzBuzzConfig);
 
-    let max_string_size = configurations.iter().fold(0, |mut acc, add| {
-        acc += add.replacement.len();
-        acc
-    });
+    let modulo = configurations
+        .iter()
+        .fold(1, |acc, conf| acc * conf.divisor / gcd(acc, conf.divisor));
 
-    let matching_slice = configurations.into_iter().map(move |conf| {
-        let divisor = conf.divisor as u32;
-        let replacement = &conf.replacement;
-        quote! { (#divisor, #replacement) }
+    let mut mapping = HashMap::new();
+
+    for conf in configurations.iter() {
+        let mut last_value = 0;
+        for multiple in repeat_with(|| {
+            let tmp = last_value;
+            last_value += conf.divisor;
+            tmp
+        })
+        .take_while(|value| *value < modulo)
+        {
+            if let Some(mapping_entry) = mapping.get_mut(&multiple) {
+                *mapping_entry = Cow::from(format!(
+                    "{}{}{}",
+                    *mapping_entry, separator, conf.replacement
+                ));
+            } else {
+                mapping.insert(multiple, Cow::from(&conf.replacement));
+            }
+        }
+    }
+
+    let mut reverse_map: HashMap<Cow<'_, str>, Vec<u32>> = HashMap::new();
+    for (div, cow) in mapping.into_iter() {
+        if let Some(entry) = reverse_map.get_mut(&cow) {
+            entry.push(div);
+        } else {
+            reverse_map.insert(cow, vec![div]);
+        }
+    }
+
+    let patterns = reverse_map.into_iter().map(|(str, pattern)| {
+        quote! { #(#pattern) | * => #str.into() }
     });
 
     let expanded = quote! {
-        |input: u32| {
-            let matching_slices = &[#(#matching_slice), *];
-            let result = matching_slices
-                .into_iter()
-                .filter(|(d, _)| input % d == 0)
-                .enumerate()
-                .fold(String::with_capacity(#max_string_size), |mut carry, (i, (_, w))| {
-                if i != 0 {
-                    carry.push_str(#separator);
-                }
-                carry.push_str(w);
-                carry
-            });
-            if result.is_empty() {
-                format!("{input}")
-            }else{
-                result
+        |input: u32| -> std::borrow::Cow<'_, str> {
+            match input % #modulo {
+                #(#patterns),*,
+                _ => format!("{input}").into(),
             }
         }
     };
@@ -74,6 +110,6 @@ impl Parse for FizzBuzzConfig {
 
 #[derive(Debug)]
 struct Configuration {
-    divisor: u8,
+    divisor: u32,
     replacement: String,
 }

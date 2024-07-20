@@ -113,3 +113,7 @@ struct Configuration {
     divisor: u32,
     replacement: String,
 }
+
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct _ReadMe;
